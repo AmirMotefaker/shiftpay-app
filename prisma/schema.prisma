@@ -1,13 +1,70 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// prisma/schema.prisma
 
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// نقش کاربران در سیستم
+enum Role {
+  ADMIN
+  MERCHANT // کافه‌دار یا رستوران‌دار
+}
+
+// نوع تراکنش‌های مالی
+enum TransactionType {
+  DEPOSIT        // واریز (پرداخت مشتری درگاه)
+  WITHDRAWAL     // برداشت (تسویه کافه‌دار به شبای خودش)
+  SHIFT_PAYMENT  // انتقال دین (پرداخت مستقیم مشتری به تامین‌کننده کافه)
+}
+
+// وضعیت تراکنش
+enum TransactionStatus {
+  PENDING   // در انتظار (مشتری در حال پرداخت است)
+  SUCCESS   // موفق
+  FAILED    // ناموفق
+  REVERSED  // برگشت خورده
+}
+
+model User {
+  id        String    @id @default(uuid())
+  phone     String    @unique // شماره موبایل کاربر
+  password  String?
+  role      Role      @default(MERCHANT)
+  merchant  Merchant?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Merchant {
+  id        String        @id @default(uuid())
+  userId    String        @unique
+  user      User          @relation(fields: [userId], references: [id])
+  name      String        // نام کافه یا رستوران
+  iban      String?       // شماره شبا برای تسویه حساب
+  status    String        @default("PENDING") // PENDING, APPROVED, SUSPENDED
+  transactions Transaction[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model Transaction {
+  id             String             @id @default(uuid())
+  merchantId     String
+  merchant       Merchant           @relation(fields: [merchantId], references: [id])
+  amount         Int                // مبلغ به ریال
+  type           TransactionType
+  status         TransactionStatus  @default(PENDING)
+  trackingCode   String?            // کد پیگیری بانکی (از سمت PSP)
+  orderRef       String?            // شماره فاکتور/سفارش داخلی کافه
+  targetIban     String?            // شبا شخص ثالث (فقط برای نوع SHIFT_PAYMENT)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([merchantId]) // برای سرعت بالا در جستجوی تراکنش‌های یک کافه
 }
